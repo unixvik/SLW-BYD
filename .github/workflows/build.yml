@@ -1,5 +1,7 @@
 name: Build APK
 on: [push, workflow_dispatch]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -10,7 +12,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.13' }
       - run: gradle assembleRelease --no-daemon
+      - run: cp app/build/outputs/apk/release/*.apk SLW-Off.apk
+      # APK direct (fără zip) în Releases → „latest”
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest SLW-Off.apk --title "SLW Off (${GITHUB_SHA::7})" --notes "Build automat din ${GITHUB_SHA::7}"
       - uses: actions/upload-artifact@v4
         with:
           name: slwoff-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: SLW-Off.apk
