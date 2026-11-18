@@ -181,6 +181,8 @@ public final class SlwDaemon {
                         if (st == ON) turnOff("SLW=ON după pornire");
                         else if (st != OFF && offCount == 0) turnOff("stare necitibilă (" + st + "), scriere oarbă");
                     }
+                } catch (NoSuchMethodException t) {
+                    log("check error: " + t); // metodă lipsă — device-ul e ok, nu-l re-achiziționăm
                 } catch (Throwable t) {
                     log("check error: " + t);
                     adas = null;
@@ -266,10 +268,22 @@ public final class SlwDaemon {
         }
     }
 
+    /** Ca BydDeviceHelper.findMethodCached: get/set sunt protected în AbsBYDAutoDevice → walk + setAccessible. */
+    private static Method find(Object dev, String name, Class<?>... params) throws NoSuchMethodException {
+        for (Class<?> c = dev.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                Method m = c.getDeclaredMethod(name, params);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {}
+        }
+        throw new NoSuchMethodException(dev.getClass().getName() + "." + name);
+    }
+
     private static int deviceType(Object dev) throws Exception {
         for (String name : new String[]{"getDevicetype", "getType"}) {
             try {
-                Object r = dev.getClass().getMethod(name).invoke(dev);
+                Object r = find(dev, name).invoke(dev);
                 if (r instanceof Number) return ((Number) r).intValue();
             } catch (NoSuchMethodException ignored) {}
         }
@@ -277,7 +291,7 @@ public final class SlwDaemon {
     }
 
     private static int getInt(Object dev, int id) throws Exception {
-        Method m = dev.getClass().getMethod("get", int.class, int.class);
+        Method m = find(dev, "get", int.class, int.class);
         Object r = m.invoke(dev, deviceType(dev), id);
         return r instanceof Number ? ((Number) r).intValue() : -1;
     }
@@ -288,14 +302,14 @@ public final class SlwDaemon {
             Class<?> ev = Class.forName("android.hardware.bydauto.BYDAutoEventValue");
             Object v = ev.getConstructor().newInstance();
             ev.getField("intValue").setInt(v, value);
-            Object r = dev.getClass().getMethod("set", int[].class, ev).invoke(dev, new int[]{id}, v);
+            Object r = find(dev, "set", int[].class, ev).invoke(dev, new int[]{id}, v);
             if (r instanceof Integer) return (Integer) r;
             if (r instanceof Boolean) return ((Boolean) r) ? 0 : -1;
             return 0;
-        } catch (ClassNotFoundException e) {
+        } catch (ClassNotFoundException | NoSuchMethodException e) {
             // fallback: set(int deviceType, int id, int value)
             try {
-                Object r = dev.getClass().getMethod("set", int.class, int.class, int.class)
+                Object r = find(dev, "set", int.class, int.class, int.class)
                         .invoke(dev, deviceType(dev), id, value);
                 return r instanceof Number ? ((Number) r).intValue() : 0;
             } catch (Throwable t) {

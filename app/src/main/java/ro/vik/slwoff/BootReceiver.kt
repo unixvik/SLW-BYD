@@ -21,6 +21,10 @@ class BootReceiver : BroadcastReceiver() {
         val pending = goAsync()
         Thread {
             try {
+                // După update, daemon-ul vechi rulează încă din APK-ul vechi → îl oprim ca să pornească cel nou.
+                if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED && Launcher.send("STOP") != null) {
+                    Thread.sleep(1500)
+                }
                 // La boot, adbd poate să nu fie gata imediat → reîncercăm ~2 minute.
                 repeat(12) { i ->
                     val msg = Launcher.ensureRunning(app)
